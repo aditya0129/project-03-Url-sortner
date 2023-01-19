@@ -31,7 +31,7 @@ const shortUrl = async (req, res) => {
   try {
 
       if (Object.keys(req.body) === 0) return res.status(400).send({ status: false, message: "plz send url" });
-
+    
       let { longUrl } = req.body;
 
       if (!longUrl) return res.status(400).send({ status: false, msg: "plz provide URL" });
@@ -42,6 +42,15 @@ const shortUrl = async (req, res) => {
 
       if(getDataCache) return res.status(200).send({status:true,msg:"URL Already exist, this data is coming from cache",data:getDataCache})
 
+      let checkUrlExist = await urlModel.findOne({ longUrl: longUrl }).select({ _id: 0, __v: 0 });
+
+      if (checkUrlExist) {
+
+      await SET_ASYNC(`${req.body.longUrl}`,JSON.stringify(checkUrlExist),"EX",10)
+
+      return res.status(200).send({status: true,message: "URL already exist, this data is comming from database",data: checkUrlExist});
+
+    } 
       ///////// You can disable below code, its extra. If data not exist with given url, then use axios code for validation
 
 
@@ -64,16 +73,6 @@ const shortUrl = async (req, res) => {
 
       if (!validator.isURL(longUrl)) return res.status(400).send({ status: false, message: "enter valid Url" });
 
-      let checkUrlExist = await urlModel.findOne({ longUrl: longUrl }).select({ _id: 0, __v: 0 });
-
-      if (checkUrlExist) {
-
-      await SET_ASYNC(`${req.body.longUrl}`,JSON.stringify(checkUrlExist),"EX",86400)
-
-      return res.status(200).send({status: true,message: "URL already exist, this data is comming from database",data: checkUrlExist});
-
-    } else {
-
       let shortIdCode = shortid.generate();
 
       let data = await urlModel.create({urlCode: shortIdCode,longUrl: longUrl,shortUrl: `${req.protocol}://${req.headers.host}/${shortIdCode}`,
@@ -81,10 +80,12 @@ const shortUrl = async (req, res) => {
         
       let { _id, __v, ...otherData } = data._doc;
 
-      await SET_ASYNC(`${req.body.longUrl}`,JSON.stringify(otherData),"EX",86400)
+      
+
+      await SET_ASYNC(`${req.body.longUrl}`,JSON.stringify(otherData),"EX",10)
 
       res.status(201).send({ status: true, data: otherData });
-    }
+   
 
   } catch (error) {
 
@@ -113,7 +114,7 @@ const getUrl = async (req, res) => {
     if (!result)return res.status(404).send({status: false,message: `URL Not found with this code ${urlCode}`});
 
     if (result) {
-      await SET_ASYNC(`${req.params.urlCode}`,JSON.stringify(result.longUrl),"EX",86400)
+      await SET_ASYNC(`${req.params.urlCode}`,JSON.stringify(result.longUrl),"EX",10)
       return res.status(302).redirect(result.longUrl);
     }
 
